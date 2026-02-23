@@ -109,11 +109,26 @@ struct DungeonInfo{
 
 int readIntRange(string user, int low, int high){
     int x;
+
     while(true){
         cout << user;
-        int x;
-        cin >> x;
-        if(x >= low && x <= high) return x;
+
+        if(!(cin >> x)){
+            cin.clear();
+
+            char ch;
+            while(cin.get(ch) && ch != '\n'){ }
+
+            cout << "Invalid. Try again." << endl;
+            continue;
+        }
+
+        char ch;
+        while(cin.get(ch) && ch != '\n'){ }
+
+        if(x >= low && x <= high) {
+            return x;}
+
         cout << "Invalid. Try again." << endl;
     }
 }

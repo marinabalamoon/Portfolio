@@ -108,6 +108,7 @@ struct DungeonInfo{
 };
 
 int readIntRange(string user, int low, int high){
+    int x;
     while(true){
         cout << user;
         int x;

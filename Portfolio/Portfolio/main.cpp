@@ -9,6 +9,8 @@
 #include <vector>
 #include <string>
 #include <cctype>
+#include <fstream>
+#include <sstream>
 
 using namespace std;
 
@@ -211,6 +213,22 @@ int stringToInt(string s){
     return value;
 }
 
+bool yesNo(string prompt){
+    while(true){
+        string ans = readLineLower(prompt);
+
+        if(ans == "yes" || ans == "y"){
+            return true;
+        }
+        else if(ans == "no" || ans == "n"){
+            return false;
+        }
+        else{
+            cout << "Please type yes or no." << endl;
+        }
+    }
+}
+
 int readIntRange(string user, int low, int high){
     while(true){
         string s = readLineText(user);
@@ -231,6 +249,61 @@ int readIntRange(string user, int low, int high){
     }
 }
 
+string addDunExtension(string filename){
+    filename = trimSpaces(filename);
+
+    if(filename.size() >= 4){
+        string ending = filename.substr(filename.size() - 4);
+        ending = makeLower(ending);
+
+        if(ending == ".dun"){
+            return filename;
+        }
+    }
+
+    return filename + ".dun";
+}
+
+string tileToWord(char tile){
+    if(tile == ' ') return "empty";
+    if(tile == '#') return "wall";
+    if(tile == 'X') return "goal";
+    if(tile == 'K') return "bluekey";
+    if(tile == 'D') return "bluedoor";
+    if(tile == 'R') return "redkey";
+    if(tile == 'd') return "reddoor";
+    if(tile == 'E') return "enemy";
+    if(tile == 'H') return "health";
+    if(tile == 'S') return "strength";
+    if(tile == 'F') return "defense";
+    if(tile == 'L') return "lava";
+    if(tile == 'T') return "spikes";
+    if(tile == 'P') return "poison";
+
+    return "unknown";
+}
+
+char wordToTile(string word){
+    word = makeLower(trimSpaces(word));
+
+    if(word == "empty") return ' ';
+    if(word == "wall") return '#';
+    if(word == "goal") return 'X';
+    if(word == "bluekey") return 'K';
+    if(word == "bluedoor") return 'D';
+    if(word == "redkey") return 'R';
+    if(word == "reddoor") return 'd';
+    if(word == "enemy") return 'E';
+    if(word == "health") return 'H';
+    if(word == "strength") return 'S';
+    if(word == "defense") return 'F';
+    if(word == "lava") return 'L';
+    if(word == "spikes") return 'T';
+    if(word == "poison") return 'P';
+
+    return '?';
+}
+
 void clearArrays(DungeonInfo &d){
     for(int r = 0; r < ROWS; r++){
         for(int c = 0; c < COLS; c++){
@@ -239,47 +312,6 @@ void clearArrays(DungeonInfo &d){
             d.enemyDef[r][c] = 0;
             d.potionAmount[r][c] = 0;
         }
-    }
-}
-
-bool battle(Player &p, Enemy &e){
-    int playerHP = p.gethp();
-    int enemyHP = e.getHp();
-
-    cout << "Battle started!" << endl;
-
-    while(playerHP > 0 && enemyHP > 0){
-        int enemyDamage = p.getAttack() - e.getDef();
-        if(enemyDamage < 0){
-            enemyDamage = 0;
-        }
-
-        cout << "You attack the enemy for " << enemyDamage << " damage." << endl;
-        enemyHP -= enemyDamage;
-
-        if(enemyHP > 0){
-            int playerDamage = e.getAttack() - p.getDef();
-            if(playerDamage < 0){
-                playerDamage = 0;
-            }
-
-            cout << "The enemy attacks you for " << playerDamage << " damage." << endl;
-            playerHP -= playerDamage;
-
-            cout << "Your HP: " << playerHP << endl;
-            cout << "Enemy HP: " << enemyHP << endl;
-        }
-    }
-
-    p.changehp(playerHP - p.gethp());
-
-    if(playerHP > 0){
-        cout << "You defeated the enemy!" << endl;
-        return true;
-    }
-    else{
-        cout << "You were defeated." << endl;
-        return false;
     }
 }
 
@@ -322,6 +354,234 @@ void makeDungeonSized(char grid[ROWS][COLS], int usedRows, int usedCols){
     for(int r = 0; r < usedRows; r++){
         grid[r][0] = '#';
         grid[r][usedCols - 1] = '#';
+    }
+}
+
+bool dungeonHasGoal(DungeonInfo &d){
+    for(int r = 0; r < d.usedRows; r++){
+        for(int c = 0; c < d.usedCols; c++){
+            if(d.grid[r][c] == 'X'){
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool saveDungeonToFile(DungeonInfo &d){
+    string filename = addDunExtension(d.name);
+
+    ofstream file(filename);
+
+    if(!file){
+        cout << "Error: Could not save file." << endl;
+        return false;
+    }
+
+    file << "MAGICTOWERDUN" << endl;
+    file << d.name << endl;
+    file << d.usedRows << " " << d.usedCols << endl;
+    file << d.spawnR << " " << d.spawnC << endl;
+
+    for(int r = 0; r < d.usedRows; r++){
+        for(int c = 0; c < d.usedCols; c++){
+            file << "CELL "
+                 << r << " "
+                 << c << " "
+                 << tileToWord(d.grid[r][c]) << " "
+                 << d.enemyHp[r][c] << " "
+                 << d.enemyAttack[r][c] << " "
+                 << d.enemyDef[r][c] << " "
+                 << d.potionAmount[r][c]
+                 << endl;
+        }
+    }
+
+    file.close();
+
+    cout << "Dungeon saved to " << filename << endl;
+    return true;
+}
+
+bool loadDungeonFromFile(DungeonInfo &d, string filename){
+    filename = addDunExtension(filename);
+
+    ifstream file(filename);
+
+    if(!file){
+        cout << "Error: File does not exist." << endl;
+        return false;
+    }
+
+    string header;
+    getline(file, header);
+
+    if(header != "MAGICTOWERDUN"){
+        cout << "Error: Improper file format." << endl;
+        return false;
+    }
+
+    getline(file, d.name);
+
+    if(d.name.size() == 0){
+        cout << "Error: Improper file format." << endl;
+        return false;
+    }
+
+    string line;
+    getline(file, line);
+    stringstream sizeStream(line);
+
+    if(!(sizeStream >> d.usedRows >> d.usedCols)){
+        cout << "Error: Improper file format." << endl;
+        return false;
+    }
+
+    if(d.usedRows < 5 || d.usedRows > ROWS || d.usedCols < 5 || d.usedCols > COLS){
+        cout << "Error: Improper dungeon size." << endl;
+        return false;
+    }
+
+    getline(file, line);
+    stringstream spawnStream(line);
+
+    if(!(spawnStream >> d.spawnR >> d.spawnC)){
+        cout << "Error: Improper file format." << endl;
+        return false;
+    }
+
+    if(d.spawnR < 0 || d.spawnR >= d.usedRows || d.spawnC < 0 || d.spawnC >= d.usedCols){
+        cout << "Error: Improper spawn location." << endl;
+        return false;
+    }
+
+    makeDungeonSized(d.grid, d.usedRows, d.usedCols);
+    clearArrays(d);
+
+    int cellCount = 0;
+
+    while(getline(file, line)){
+        if(trimSpaces(line).size() == 0){
+            continue;
+        }
+
+        stringstream ss(line);
+
+        string label;
+        int r;
+        int c;
+        string word;
+        int hp;
+        int attack;
+        int defense;
+        int potion;
+
+        if(!(ss >> label >> r >> c >> word >> hp >> attack >> defense >> potion)){
+            cout << "Error: Improper file format." << endl;
+            return false;
+        }
+
+        if(label != "CELL"){
+            cout << "Error: Improper file format." << endl;
+            return false;
+        }
+
+        if(r < 0 || r >= d.usedRows || c < 0 || c >= d.usedCols){
+            cout << "Error: Cell out of bounds." << endl;
+            return false;
+        }
+
+        char tile = wordToTile(word);
+
+        if(tile == '?'){
+            cout << "Error: Unknown object type." << endl;
+            return false;
+        }
+
+        d.grid[r][c] = tile;
+        d.enemyHp[r][c] = hp;
+        d.enemyAttack[r][c] = attack;
+        d.enemyDef[r][c] = defense;
+        d.potionAmount[r][c] = potion;
+
+        cellCount++;
+    }
+
+    file.close();
+
+    if(cellCount == 0){
+        cout << "Error: File has no dungeon cells." << endl;
+        return false;
+    }
+
+    if(!dungeonHasGoal(d)){
+        cout << "Error: Dungeon file has no goal." << endl;
+        return false;
+    }
+
+    cout << "Loaded dungeon from " << filename << endl;
+    return true;
+}
+
+DungeonInfo loadDungeonFromFileMenu(){
+    DungeonInfo d;
+    d.name = "";
+
+    while(true){
+        string filename = readLineText("Enter dungeon filename, or cancel: ");
+
+        if(makeLower(filename) == "cancel"){
+            d.name = "";
+            return d;
+        }
+
+        if(loadDungeonFromFile(d, filename)){
+            return d;
+        }
+
+        cout << "Try again." << endl;
+    }
+}
+
+bool battle(Player &p, Enemy &e){
+    int playerHP = p.gethp();
+    int enemyHP = e.getHp();
+
+    cout << "Battle started!" << endl;
+
+    while(playerHP > 0 && enemyHP > 0){
+        int enemyDamage = p.getAttack() - e.getDef();
+        if(enemyDamage < 0){
+            enemyDamage = 0;
+        }
+
+        cout << "You attack the enemy for " << enemyDamage << " damage." << endl;
+        enemyHP -= enemyDamage;
+
+        if(enemyHP > 0){
+            int playerDamage = e.getAttack() - p.getDef();
+            if(playerDamage < 0){
+                playerDamage = 0;
+            }
+
+            cout << "The enemy attacks you for " << playerDamage << " damage." << endl;
+            playerHP -= playerDamage;
+
+            cout << "Your HP: " << playerHP << endl;
+            cout << "Enemy HP: " << enemyHP << endl;
+        }
+    }
+
+    p.changehp(playerHP - p.gethp());
+
+    if(playerHP > 0){
+        cout << "You defeated the enemy!" << endl;
+        return true;
+    }
+    else{
+        cout << "You were defeated." << endl;
+        return false;
     }
 }
 
@@ -474,6 +734,11 @@ int movePlayer(DungeonInfo &d, Player &p, char input){
     }
     else{
         cout << "Invalid move." << endl;
+        return 0;
+    }
+
+    if(newRow < 0 || newRow >= d.usedRows || newCol < 0 || newCol >= d.usedCols){
+        cout << "You cannot move outside the dungeon." << endl;
         return 0;
     }
 
@@ -686,6 +951,7 @@ void playDungeon(const DungeonInfo& original){
         string in = readLineLower("Enter move (W,A,S,D), inspect, or Q to quit: ");
 
         if(in == "q" || in == "quit"){
+            cout << "Returning to main menu" << endl;
             return;
         }
         else if(in == "inspect"){
@@ -770,6 +1036,11 @@ void addObjectData(DungeonInfo &d, int rr, int cc, char place){
 void addDamageFloor(DungeonInfo &d, int rr, int cc){
     string type = readLineLower("Type floor (lava / spikes / poison): ");
 
+    d.enemyHp[rr][cc] = 0;
+    d.enemyAttack[rr][cc] = 0;
+    d.enemyDef[rr][cc] = 0;
+    d.potionAmount[rr][cc] = 0;
+
     if(type == "lava"){
         d.grid[rr][cc] = 'L';
         cout << "Placed lava." << endl;
@@ -788,20 +1059,13 @@ void addDamageFloor(DungeonInfo &d, int rr, int cc){
 }
 
 void editDungeon(DungeonInfo &d){
-    bool hasGoal = false;
-
-    for(int r = 0; r < d.usedRows; r++){
-        for(int c = 0; c < d.usedCols; c++){
-            if(d.grid[r][c] == 'X'){
-                hasGoal = true;
-            }
-        }
-    }
-
     while(true){
         cout << endl << "Level Editor" << endl;
         printEditor(d.grid, d.usedRows, d.usedCols, d.spawnR, d.spawnC);
-        cout << "Type add, inspect, save, or cancel" << endl;
+        cout << "Type add, inspect, save, file, or cancel" << endl;
+        cout << "add = change the dungeon" << endl;
+        cout << "save = save changes to the playable list" << endl;
+        cout << "file = save changes to a .dun file" << endl;
 
         string choice = readLineLower("Choose: ");
 
@@ -817,8 +1081,8 @@ void editDungeon(DungeonInfo &d){
             showObjectList();
 
             string word = readLineLower("Type object name: ");
-            int r = readIntRange("Row (1..rows): ", 1, d.usedRows);
-            int c = readIntRange("Col (1..cols): ", 1, d.usedCols);
+            int r = readIntRange("Row: ", 1, d.usedRows);
+            int c = readIntRange("Col: ", 1, d.usedCols);
 
             int rr = r - 1;
             int cc = c - 1;
@@ -841,10 +1105,6 @@ void editDungeon(DungeonInfo &d){
                     cout << "Placed." << endl;
                 }
                 else{
-                    if(place == 'X'){
-                        hasGoal = true;
-                    }
-
                     d.grid[rr][cc] = place;
                     addObjectData(d, rr, cc, place);
                     cout << "Placed." << endl;
@@ -852,12 +1112,25 @@ void editDungeon(DungeonInfo &d){
             }
         }
         else if(choice == "save"){
-            if(!hasGoal){
+            if(!dungeonHasGoal(d)){
                 cout << "You must place a goal (X) before saving." << endl;
             }
             else{
                 cout << "Dungeon updated!" << endl;
+
+                if(yesNo("Save this dungeon to a file too? ")){
+                    saveDungeonToFile(d);
+                }
+
                 return;
+            }
+        }
+        else if(choice == "file"){
+            if(!dungeonHasGoal(d)){
+                cout << "You must place a goal (X) before saving." << endl;
+            }
+            else{
+                saveDungeonToFile(d);
             }
         }
         else{
@@ -960,6 +1233,11 @@ DungeonInfo runEditor(){
                 d.spawnR = spawnR;
                 d.spawnC = spawnC;
                 cout << "Dungeon saved!" << endl;
+
+                if(yesNo("Save this dungeon to a file too? ")){
+                    saveDungeonToFile(d);
+                }
+
                 return d;
             }
         }
@@ -980,8 +1258,9 @@ void printMainMenu(){
 void printDesignMenu(){
     cout << "1) Create a new dungeon" << endl;
     cout << "2) Edit an existing dungeon" << endl;
-    cout << "3) Back" << endl;
-    cout << "You can also type create, edit, or back" << endl;
+    cout << "3) Load dungeon from file into editor" << endl;
+    cout << "4) Back" << endl;
+    cout << "You can also type create, edit, load, or back" << endl;
 }
 
 void listDungeons(const vector<DungeonInfo>& dungeons){
@@ -1027,12 +1306,81 @@ int chooseDungeon(const vector<DungeonInfo>& dungeons){
     }
 }
 
+void addOrReplaceDungeon(vector<DungeonInfo> &dungeons, DungeonInfo d){
+    bool replaced = false;
+
+    for(int i = 0; i < (int)dungeons.size(); i++){
+        if(makeLower(dungeons[i].name) == makeLower(d.name)){
+            dungeons[i] = d;
+            replaced = true;
+        }
+    }
+
+    if(replaced){
+        cout << "Updated \"" << d.name << "\"." << endl;
+    }
+    else{
+        dungeons.push_back(d);
+        cout << "Added \"" << d.name << "\" to playable dungeons." << endl;
+    }
+}
+
+void chooseDungeonToPlay(vector<DungeonInfo> &dungeons){
+    while(true){
+        listDungeons(dungeons);
+        cout << "Type load to load a dungeon from a .dun file." << endl;
+        cout << "Type back to return to the main menu." << endl;
+
+        string pick = readLineLower("Choose dungeon number/name, load, or back: ");
+
+        if(pick == "back"){
+            return;
+        }
+        else if(pick == "load"){
+            DungeonInfo loaded = loadDungeonFromFileMenu();
+
+            if(loaded.name.size() != 0){
+                addOrReplaceDungeon(dungeons, loaded);
+                playDungeon(loaded);
+                return;
+            }
+        }
+        else{
+            bool found = false;
+
+            if(isNumberString(pick)){
+                int value = stringToInt(pick);
+
+                if(value >= 1 && value <= (int)dungeons.size()){
+                    playDungeon(dungeons[value - 1]);
+                    found = true;
+                    return;
+                }
+            }
+
+            if(!found){
+                for(int i = 0; i < (int)dungeons.size(); i++){
+                    if(makeLower(dungeons[i].name) == pick){
+                        playDungeon(dungeons[i]);
+                        found = true;
+                        return;
+                    }
+                }
+            }
+
+            if(!found){
+                cout << "Invalid dungeon choice." << endl;
+            }
+        }
+    }
+}
+
 void runDesignMenu(vector<DungeonInfo> &dungeons){
     while(true){
         printDesignMenu();
         string choice = readLineLower("Choose: ");
 
-        if(choice == "3" || choice == "back"){
+        if(choice == "4" || choice == "back"){
             return;
         }
         else if(choice == "1" || choice == "create"){
@@ -1042,28 +1390,25 @@ void runDesignMenu(vector<DungeonInfo> &dungeons){
                 cout << "Editor canceled." << endl;
             }
             else{
-                bool replaced = false;
-
-                for(int i = 0; i < (int)dungeons.size(); i++){
-                    if(makeLower(dungeons[i].name) == makeLower(created.name)){
-                        dungeons[i] = created;
-                        replaced = true;
-                    }
-                }
-
-                if(replaced){
-                    cout << "Updated \"" << created.name << "\"." << endl;
-                }
-                else{
-                    dungeons.push_back(created);
-                    cout << "Added \"" << created.name << "\" to playable dungeons." << endl;
-                }
+                addOrReplaceDungeon(dungeons, created);
             }
         }
         else if(choice == "2" || choice == "edit"){
             listDungeons(dungeons);
             int pick = chooseDungeon(dungeons);
             editDungeon(dungeons[pick]);
+        }
+        else if(choice == "3" || choice == "load"){
+            DungeonInfo loaded = loadDungeonFromFileMenu();
+
+            if(loaded.name.size() == 0){
+                cout << "Load canceled." << endl;
+            }
+            else{
+                editDungeon(loaded);
+                addOrReplaceDungeon(dungeons, loaded);
+                cout << "Loaded dungeon is now in your dungeon list." << endl;
+            }
         }
         else{
             cout << "Invalid choice." << endl;
@@ -1080,23 +1425,12 @@ int main() {
         printMainMenu();
         string choice = readLineLower("Choose: ");
 
-        if(choice == "3" || choice == "exit" || choice == "enter a dungeon"){
-            if(choice == "enter a dungeon"){
-                listDungeons(dungeons);
-                int pick = chooseDungeon(dungeons);
-                playDungeon(dungeons[pick]);
-            }
-            else{
-                if(choice == "3" || choice == "exit"){
-                    cout << "Goodbye!" << endl;
-                    break;
-                }
-            }
+        if(choice == "3" || choice == "exit"){
+            cout << "Goodbye!" << endl;
+            break;
         }
-        else if(choice == "1" || choice == "enter"){
-            listDungeons(dungeons);
-            int pick = chooseDungeon(dungeons);
-            playDungeon(dungeons[pick]);
+        else if(choice == "1" || choice == "enter" || choice == "enter a dungeon"){
+            chooseDungeonToPlay(dungeons);
         }
         else if(choice == "2" || choice == "design" || choice == "design a dungeon"){
             runDesignMenu(dungeons);
